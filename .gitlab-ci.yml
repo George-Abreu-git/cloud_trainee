@@ -1,0 +1,105 @@
+stages: 
+  - lint
+  - test
+  - sast
+  - build
+  - deploy
+
+
+variables: 
+
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+  IMAGE_LATEST: $CI_REGISTRY_IMAGE:latest
+
+  PYTHONDONTWRITEBYTECODE: "1"
+
+
+cache: 
+  paths:
+    - .cache/pip
+
+
+
+lint: 
+  stage: lint
+  image: python:3.11-slim
+
+  script:
+    - pip install flake8 --quiet
+
+    - flake8 app.py --max-line-length=88 --exclude=.venv,__pycache__
+
+
+
+test: 
+  stage: test
+  image: python:3.11-slim
+
+  script: 
+    - pip install -r requirements.txt --quiet
+    - pytest test_app.py -v
+
+
+sast: 
+  stage: sast
+  image: python:3.11-slim
+  
+  script:
+    - pip install bandit --quiet
+
+
+    - bandit -r . -ll --exclude .venv,__pycache__ -o bandit-report.txt || true
+    - cat bandit-report.txt
+
+  artifacts:
+    paths: 
+      - bandit-report.txt
+    expire_in: 7 days
+
+    when: always
+
+
+build: 
+  stage: build
+  image: docker:24
+
+  services:
+    - docker:24-dind
+
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    
+  script: 
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+    - docker build -t $IMAGE_TAG -t $IMAGE_LATEST .
+
+    - docker push $IMAGE_TAG
+    - docker push $IMAGE_LATEST
+
+
+
+deploy:
+  stage: deploy
+  image: python:3.11-slim
+
+  
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+  script:
+    - echo "Iniciando deploy no AWS ECS"
+    - echo "Imagem a ser deployada - $IMAGE_TAG"
+    - echo "--- Comandos que seriam executados em producao ---"
+    - echo "1. Autenticar na AWS"
+    - echo "   aws configure set aws_access_key_id AWS_ACCESS_KEY"
+    - echo "   aws configure set aws_secret_access_key AWS_SECRET_KEY"
+    - echo "2. Atualizar servico no ECS"
+    - echo "   aws ecs update-service --cluster trainee-cluster --service trainee-api --force-new-deployment"
+    - echo "3. Aguardar deploy estabilizar"
+    - echo "   aws ecs wait services-stable --cluster trainee-cluster --services trainee-api"
+    - echo "Deploy simulado com sucesso!"
+    - echo "Branch - $CI_COMMIT_REF_NAME"
+    - echo "Commit - $CI_COMMIT_SHORT_SHA"
+    - echo "Imagem - $IMAGE_TAG"
