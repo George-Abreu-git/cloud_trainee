@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 FROM python:3.11-slim
 
-LABEL maintainer="gergeabreu68@outlook.com"
+LABEL maintainer="georgeabreu68@outlook.com"
 LABEL version="1.0.0"
 LABEL description="Trainee DevOps API - Flask"
 
